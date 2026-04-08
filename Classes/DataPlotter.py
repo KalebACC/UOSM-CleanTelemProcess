@@ -9,6 +9,7 @@ def speed_to_mps(csv_speed):
     """Convert raw CSV speed to m/s."""
     return speed_to_kph(csv_speed) / 3.6
 
+
 class DataPlotter:
     """Read telemetry CSV data and render plots, with optional smoothing, speed conversion, and time filtering."""
 
@@ -79,3 +80,104 @@ class DataPlotter:
         self.plot_single("Speed",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Current",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Voltage",smooth_window,start_time,end_time,speed_unit)
+    
+    def plot_compare(self,file: str,column: str,smooth_window: int = 0,start_time: int | None = None, end_time: int | None = None, speed_unit: str = "kph",) -> None:
+        """Compare a column from this plotter against the same column from another CSV file."""
+        if self.data is None:
+            raise ValueError("Load data first")
+
+        # Load the comparison file into a temporary DataPlotter
+        other = DataPlotter(file)
+        other.load_data(convert_speed=True)
+
+        # Resolve speed column alias for both datasets
+        col = column
+        if column.lower() == "speed":
+            col_map = {"raw": "Speed", "kph": "Speed_kph", "mps": "Speed_mps"}
+            if speed_unit not in col_map:
+                raise ValueError(f"Invalid speed_unit: {speed_unit}")
+            col = col_map[speed_unit]
+
+        for label, df in [("Self", self.data), ("Other", other.data)]:
+            if col not in df.columns:
+                raise ValueError(f"{col} not found in {label} dataset")
+
+        def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
+            if start_time is not None:
+                df = df[df["TimePlot"] >= start_time]
+            if end_time is not None:
+                df = df[df["TimePlot"] <= end_time]
+            return df
+
+        self_df = apply_filters(self.data)
+        other_df = apply_filters(other.data)
+
+        self_label = self.file_path.split("/")[-1]
+        other_label = file.split("/")[-1]
+
+        plt.figure(figsize=(10, 5))
+
+        for df, label in [(self_df, self_label), (other_df, other_label)]:
+            x = df["TimePlot"]
+            y = df[col]
+            line, = plt.plot(x, y, alpha=0.4, label=f"{label} Raw")
+            if smooth_window > 1:
+                y_smooth = y.rolling(window=smooth_window, min_periods=1, center=True).mean()
+                plt.plot(x, y_smooth, color=line.get_color(), linewidth=2, label=f"{label} Smoothed ({smooth_window})")
+
+        plt.xlabel("Time (ms)")
+        plt.ylabel(col)
+        plt.title(f"{col} vs Time — Comparison")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    def plot_two(self,column1: str,column2: str,smooth_window: int = 0,start_time: int | None = None,end_time: int | None = None) -> None:
+        """Plot two columns on the same graph."""
+
+        if self.data is None:
+            raise ValueError("Load data first")
+
+        for col in [column1, column2]:
+            if col not in self.data.columns:
+                raise ValueError(f"{col} not found")
+
+        df = self.data
+        if start_time is not None:
+            df = df[df["TimePlot"] >= start_time]
+        if end_time is not None:
+            df = df[df["TimePlot"] <= end_time]
+
+        x = df["TimePlot"]
+
+        plt.figure(figsize=(10, 5))
+
+        for col in [column1, column2]:
+            y = df[col]
+            plt.plot(x, y, label=f"{col} Raw", alpha=0.7)
+
+            if smooth_window > 1:
+                y_s = y.rolling(window=smooth_window, min_periods=1, center=True).mean()
+                plt.plot(x, y_s, linewidth=2, label=f"{col} Smoothed")
+
+        plt.xlabel("Time (ms)")
+        plt.ylabel("Values")
+        plt.title(f"{column1} vs {column2}")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    def give_averages(self) -> None:
+        """Print averages for all numeric columns."""
+        if self.data is None:
+            raise ValueError("Load data first")
+
+        for col in self.data.columns:
+            avg_val = self.data[col].mean()
+            print(f"{col} average is {avg_val:.2f}")
+            
+    def plot_compare_all(self,file: str,smooth_window: int = 0,start_time: int | None = None, end_time: int | None = None, speed_unit: str = "kph",) -> None:
+        self.plot_compare(file=file,column="Throttle",smooth_window=smooth_window,start_time=start_time,end_time=end_time,speed_unit=speed_unit)
+        self.plot_compare(file=file,column="Speed",smooth_window=smooth_window,start_time=start_time,end_time=end_time,speed_unit=speed_unit)
+        self.plot_compare(file=file,column="Current",smooth_window=smooth_window,start_time=start_time,end_time=end_time,speed_unit=speed_unit)
+        self.plot_compare(file=file,column="Voltage",smooth_window=smooth_window,start_time=start_time,end_time=end_time,speed_unit=speed_unit)
