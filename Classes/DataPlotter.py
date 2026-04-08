@@ -1,6 +1,13 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
+MS_PER_MINUTE = 60_000
+
+
+def ms_to_minutes(ms):
+    """Convert milliseconds to minutes."""
+    return ms / MS_PER_MINUTE
+
 def speed_to_kph(csv_speed):
     """Convert raw CSV speed to km/h."""
     return csv_speed * 0.0011
@@ -18,25 +25,25 @@ class DataPlotter:
         self.data: pd.DataFrame | None = None
 
     def load_data(self, convert_speed: bool = True) -> None:
-        """Load CSV, prepare TimePlot column, and optionally convert speed."""
+        """Load CSV, prepare TimePlot in minutes, and optionally convert speed."""
         self.data = pd.read_csv(self.file_path)
         expected_cols = ["Tick", "Throttle", "Speed", "Current", "Voltage"]
         for col in expected_cols:
             if col not in self.data.columns:
                 raise ValueError(f"Missing column: {col}")
 
-        # Convert Tick to TimePlot in ms starting at 0
+        # Convert Tick to TimePlot in minutes starting at 0
         self.data["Tick"] = self.data["Tick"].astype(int)
         self.data["Tick"] -= self.data["Tick"].iloc[0]
-        self.data["TimePlot"] = self.data["Tick"]
+        self.data["TimePlot"] = ms_to_minutes(self.data["Tick"])
 
         # Convert Speed column if requested
         if convert_speed:
             self.data["Speed_kph"] = self.data["Speed"].apply(speed_to_kph)
             self.data["Speed_mps"] = self.data["Speed"].apply(speed_to_mps)
 
-    def plot_single(self, column: str, smooth_window: int = 0, start_time: int | None = None, end_time: int | None = None,speed_unit: str = "kph") -> None:
-        """Plot a single column with optional smoothing, time range filter, and speed unit conversion."""
+    def plot_single(self, column: str, smooth_window: int = 0, start_time: float | None = None, end_time: float | None = None,speed_unit: str = "kph") -> None:
+        """Plot a single column with optional smoothing, minute range filter, and speed unit conversion."""
         if self.data is None:
             raise ValueError("Load data first")
 
@@ -65,15 +72,15 @@ class DataPlotter:
             y_smooth = y.rolling(window=smooth_window, min_periods=1, center=True).mean()
             plt.plot(x, y_smooth, label=f"Smoothed ({smooth_window})", linewidth=2)
 
-        plt.xlabel("Time (ms)")
+        plt.xlabel("Time (min)")
         plt.ylabel(column)
         plt.title(f"{column} vs Time")
         plt.legend()
         plt.grid(True)
         plt.show()
 
-    def plot_all(self,smooth_window: int = 0,start_time: int | None = None,end_time: int | None = None, speed_unit: str = "kph") -> None:
-        """Plot all columns with optional smoothing, speed unit conversion, and time filter."""
+    def plot_all(self,smooth_window: int = 0,start_time: float | None = None,end_time: float | None = None, speed_unit: str = "kph") -> None:
+        """Plot all columns with optional smoothing, speed unit conversion, and minute filter."""
         if self.data is None:
             raise ValueError("Load data first")
         self.plot_single("Throttle",smooth_window,start_time,end_time,speed_unit)
@@ -81,7 +88,7 @@ class DataPlotter:
         self.plot_single("Current",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Voltage",smooth_window,start_time,end_time,speed_unit)
     
-    def plot_compare(self,file: str,column: str,smooth_window: int = 0,start_time: int | None = None, end_time: int | None = None, speed_unit: str = "kph",) -> None:
+    def plot_compare(self,file: str,column: str,smooth_window: int = 0,start_time: float | None = None, end_time: float | None = None, speed_unit: str = "kph",) -> None:
         """Compare a column from this plotter against the same column from another CSV file."""
         if self.data is None:
             raise ValueError("Load data first")
@@ -125,14 +132,14 @@ class DataPlotter:
                 y_smooth = y.rolling(window=smooth_window, min_periods=1, center=True).mean()
                 plt.plot(x, y_smooth, color=line.get_color(), linewidth=2, label=f"{label} Smoothed ({smooth_window})")
 
-        plt.xlabel("Time (ms)")
+        plt.xlabel("Time (min)")
         plt.ylabel(col)
         plt.title(f"{col} vs Time — Comparison")
         plt.legend()
         plt.grid(True)
         plt.show()
 
-    def plot_two(self,column1: str,column2: str,smooth_window: int = 0,start_time: int | None = None,end_time: int | None = None) -> None:
+    def plot_two(self,column1: str,column2: str,smooth_window: int = 0,start_time: float | None = None,end_time: float | None = None) -> None:
         """Plot two columns on the same graph."""
 
         if self.data is None:
@@ -160,7 +167,7 @@ class DataPlotter:
                 y_s = y.rolling(window=smooth_window, min_periods=1, center=True).mean()
                 plt.plot(x, y_s, linewidth=2, label=f"{col} Smoothed")
 
-        plt.xlabel("Time (ms)")
+        plt.xlabel("Time (min)")
         plt.ylabel("Values")
         plt.title(f"{column1} vs {column2}")
         plt.legend()
@@ -176,7 +183,7 @@ class DataPlotter:
             avg_val = self.data[col].mean()
             print(f"{col} average is {avg_val:.2f}")
             
-    def plot_compare_all(self,file: str,smooth_window: int = 0,start_time: int | None = None, end_time: int | None = None, speed_unit: str = "kph",) -> None:
+    def plot_compare_all(self,file: str,smooth_window: int = 0,start_time: float | None = None, end_time: float | None = None, speed_unit: str = "kph",) -> None:
         self.plot_compare(file=file,column="Throttle",smooth_window=smooth_window,start_time=start_time,end_time=end_time,speed_unit=speed_unit)
         self.plot_compare(file=file,column="Speed",smooth_window=smooth_window,start_time=start_time,end_time=end_time,speed_unit=speed_unit)
         self.plot_compare(file=file,column="Current",smooth_window=smooth_window,start_time=start_time,end_time=end_time,speed_unit=speed_unit)
