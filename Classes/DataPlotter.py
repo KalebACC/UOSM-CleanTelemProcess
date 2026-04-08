@@ -16,7 +16,6 @@ def speed_to_mps(csv_speed):
     """Convert raw CSV speed to m/s."""
     return speed_to_kph(csv_speed) / 3.6
 
-
 class DataPlotter:
     """Read telemetry CSV data and render plots, with optional smoothing, speed conversion, and time filtering."""
 
@@ -87,7 +86,7 @@ class DataPlotter:
         self.plot_single("Speed",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Current",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Voltage",smooth_window,start_time,end_time,speed_unit)
-    
+
     def plot_compare(self,file: str,column: str,smooth_window: int = 0,start_time: float | None = None, end_time: float | None = None, speed_unit: str = "kph",) -> None:
         """Compare a column from this plotter against the same column from another CSV file."""
         if self.data is None:
