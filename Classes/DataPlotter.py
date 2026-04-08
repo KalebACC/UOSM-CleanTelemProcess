@@ -10,7 +10,7 @@ def ms_to_minutes(ms):
 
 def speed_to_kph(csv_speed):
     """Convert raw CSV speed to km/h."""
-    return csv_speed * 0.0011
+    return csv_speed * 0.001
 
 def speed_to_mps(csv_speed):
     """Convert raw CSV speed to m/s."""
