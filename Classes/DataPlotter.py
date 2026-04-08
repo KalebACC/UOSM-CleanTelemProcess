@@ -34,14 +34,7 @@ class DataPlotter:
             self.data["Speed_kph"] = self.data["Speed"].apply(speed_to_kph)
             self.data["Speed_mps"] = self.data["Speed"].apply(speed_to_mps)
 
-    def plot_single(
-        self, 
-        column: str, 
-        smooth_window: int = 0,
-        start_time: int | None = None, 
-        end_time: int | None = None,
-        speed_unit: str = "kph"
-    ) -> None:
+    def plot_single(self, column: str, smooth_window: int = 0, start_time: int | None = None, end_time: int | None = None,speed_unit: str = "kph") -> None:
         """Plot a single column with optional smoothing, time range filter, and speed unit conversion."""
         if self.data is None:
             raise ValueError("Load data first")
@@ -78,44 +71,11 @@ class DataPlotter:
         plt.grid(True)
         plt.show()
 
-    def plot_all(
-        self,
-        smooth_window: int = 0,
-        start_time: int | None = None,
-        end_time: int | None = None,
-        speed_unit: str = "kph"  # "kph", "mps", or "raw"
-    ) -> None:
+    def plot_all(self,smooth_window: int = 0,start_time: int | None = None,end_time: int | None = None, speed_unit: str = "kph") -> None:
         """Plot all columns with optional smoothing, speed unit conversion, and time filter."""
         if self.data is None:
             raise ValueError("Load data first")
-
-        df = self.data
-        if start_time is not None:
-            df = df[df["TimePlot"] >= start_time]
-        if end_time is not None:
-            df = df[df["TimePlot"] <= end_time]
-
-        x = df["TimePlot"]
-        plt.figure(figsize=(12, 6))
-
-        for col in ["Throttle", "Current", "Voltage"]:
-            y = df[col]
-            plt.plot(x, y, alpha=0.5, label=f"{col} Raw")
-            if smooth_window > 1:
-                y_smooth = y.rolling(window=smooth_window, min_periods=1, center=True).mean()
-                plt.plot(x, y_smooth, linewidth=2, label=f"{col} Smoothed")
-
-        # Plot Speed with unit conversion
-        speed_col = {"raw": "Speed", "kph": "Speed_kph", "mps": "Speed_mps"}[speed_unit]
-        y = df[speed_col]
-        plt.plot(x, y, alpha=0.5, label=f"Speed ({speed_unit}) Raw")
-        if smooth_window > 1:
-            y_smooth = y.rolling(window=smooth_window, min_periods=1, center=True).mean()
-            plt.plot(x, y_smooth, linewidth=2, label=f"Speed ({speed_unit}) Smoothed")
-
-        plt.xlabel("Time (ms)")
-        plt.ylabel("Values")
-        plt.title("Telemetry vs Time")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        self.plot_single("Throttle",smooth_window,start_time,end_time,speed_unit)
+        self.plot_single("Speed",smooth_window,start_time,end_time,speed_unit)
+        self.plot_single("Current",smooth_window,start_time,end_time,speed_unit)
+        self.plot_single("Voltage",smooth_window,start_time,end_time,speed_unit)
