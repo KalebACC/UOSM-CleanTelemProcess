@@ -2,6 +2,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 MS_PER_MINUTE = 60_000
+DEFAULT_START_SPEED_KPH = 8.0
+DEFAULT_START_CURRENT_A = 5.0
+DEFAULT_START_THROTTLE = 1.0
+DEFAULT_END_CURRENT_A = 1.0
+DEFAULT_END_THROTTLE = 1.0
+DEFAULT_MIN_ACTIVE_SECONDS = 1.0
 
 
 def ms_to_minutes(ms):
@@ -17,6 +23,76 @@ def speed_to_mps(csv_speed):
     return speed_to_kph(csv_speed) / 3.6
 
 
+def _seconds_to_samples(seconds: float, tick_ms: pd.Series) -> int:
+    """Convert seconds to an estimated number of telemetry samples."""
+    dt = tick_ms.diff().dropna()
+    dt = dt[dt > 0]
+    if dt.empty:
+        return 1
+
+    median_dt_seconds = float(dt.median()) / 1000.0
+    if median_dt_seconds <= 0:
+        return 1
+    return max(1, int(round(seconds / median_dt_seconds)))
+
+
+def detect_official_run_bounds(
+    data: pd.DataFrame,
+    start_speed_kph: float = DEFAULT_START_SPEED_KPH,
+    start_current_a: float = DEFAULT_START_CURRENT_A,
+    start_throttle: float = DEFAULT_START_THROTTLE,
+    end_current_a: float = DEFAULT_END_CURRENT_A,
+    end_throttle: float = DEFAULT_END_THROTTLE,
+    min_active_seconds: float = DEFAULT_MIN_ACTIVE_SECONDS,
+) -> tuple[int, int] | None:
+    """Detect the official run start/end rows in telemetry data.
+
+    The default logic is intentionally conservative:
+    - Start requires sustained activity (throttle or loaded movement).
+    - End is the last point where the car still appears under power.
+    This helps ignore push-on/push-off periods where speed may be non-zero
+    while throttle/current are low.
+    """
+    required = ["Tick", "Throttle", "Speed", "Current"]
+    for col in required:
+        if col not in data.columns:
+            raise ValueError(f"Missing column: {col}")
+
+    tick = pd.to_numeric(data["Tick"], errors="coerce").fillna(0)
+    throttle = pd.to_numeric(data["Throttle"], errors="coerce").fillna(0).abs()
+    speed_kph = pd.to_numeric(data["Speed"], errors="coerce").fillna(0).apply(speed_to_kph)
+    current_a = pd.to_numeric(data["Current"], errors="coerce").fillna(0).abs() / 1000.0
+
+    # Start is either throttle engagement or sustained speed under meaningful load.
+    start_signal = (throttle >= start_throttle) | (
+        (speed_kph >= start_speed_kph) & (current_a >= start_current_a)
+    )
+    if not start_signal.any():
+        return None
+
+    start_window = _seconds_to_samples(min_active_seconds, tick)
+    sustained_start = start_signal.rolling(window=start_window, min_periods=start_window).sum() >= start_window
+
+    if sustained_start.any():
+        first_confirmed = int(sustained_start[sustained_start].index[0])
+        start_idx = max(0, first_confirmed - start_window + 1)
+    else:
+        start_idx = int(start_signal[start_signal].index[0])
+
+    # End is the last sample where the car still appears under driver/motor control.
+    end_signal = (throttle >= end_throttle) | (current_a >= end_current_a)
+    end_candidates = end_signal.iloc[start_idx:]
+    if end_candidates.any():
+        end_idx = int(end_candidates[end_candidates].index[-1])
+    else:
+        end_idx = int(start_idx)
+
+    if end_idx < start_idx:
+        return None
+
+    return start_idx, end_idx
+
+
 def calculate_distance_km(data: pd.DataFrame) -> pd.Series:
     """Calculate cumulative distance in kilometers from telemetry speed and time."""
     time_s = (data["Tick"] - data["Tick"].iloc[0]) / 1000.0
@@ -29,11 +105,18 @@ def calculate_distance_km(data: pd.DataFrame) -> pd.Series:
 class DataPlotter:
     """Read telemetry CSV data and render plots, with optional smoothing, speed conversion, and time filtering."""
 
-    #TODO TRUNCATE THE DF TO WHEN THE RUN OFFICIALY STARTS
-
-    def __init__(self, file_path: str) -> None:
+    def __init__(
+        self,
+        file_path: str,
+        auto_trim_to_official_run: bool = True,
+        run_detection_options: dict | None = None,
+    ) -> None:
         self.file_path: str = file_path
         self.data: pd.DataFrame | None = None
+        self.auto_trim_to_official_run: bool = auto_trim_to_official_run
+        self.run_detection_options: dict = run_detection_options or {}
+        self.official_run_bounds: tuple[int, int] | None = None
+        self.official_run_time_window_min: tuple[float, float] | None = None
         self.load_data()
 
     def load_data(self, convert_speed: bool = True) -> None:
@@ -43,6 +126,28 @@ class DataPlotter:
         for col in expected_cols:
             if col not in self.data.columns:
                 raise ValueError(f"Missing column: {col}")
+
+        # Normalize core telemetry columns to numeric values.
+        for col in expected_cols:
+            self.data[col] = pd.to_numeric(self.data[col], errors="coerce")
+        self.data = self.data.dropna(subset=expected_cols).reset_index(drop=True)
+
+        capture_start_tick = int(self.data["Tick"].iloc[0])
+        self.official_run_bounds = None
+        self.official_run_time_window_min = None
+
+        if self.auto_trim_to_official_run:
+            bounds = detect_official_run_bounds(self.data, **self.run_detection_options)
+            if bounds is not None:
+                start_idx, end_idx = bounds
+                start_tick = int(self.data["Tick"].iloc[start_idx])
+                end_tick = int(self.data["Tick"].iloc[end_idx])
+                self.official_run_bounds = (start_idx, end_idx)
+                self.official_run_time_window_min = (
+                    ms_to_minutes(start_tick - capture_start_tick),
+                    ms_to_minutes(end_tick - capture_start_tick),
+                )
+                self.data = self.data.iloc[start_idx : end_idx + 1].reset_index(drop=True)
 
         # Convert Tick to TimePlot in minutes starting at 0
         self.data["Tick"] = self.data["Tick"].astype(int)
@@ -196,6 +301,10 @@ class DataPlotter:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+    def get_official_run_window_minutes(self) -> tuple[float, float] | None:
+        """Return detected official run start/end times in capture-relative minutes."""
+        return self.official_run_time_window_min
 
     def give_averages(self) -> None:
         """Print averages for all numeric columns."""
