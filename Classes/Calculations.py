@@ -1,23 +1,26 @@
 import numpy as np
 import pandas as pd
 
-def get_efficiency(num_laps: int, energy_joules: float, track_len_km:float) -> None:
-    """gets the efficiency of the car in km/kWh
+
+def get_efficiency(distance_km: float, energy_joules: float) -> float:
+    """Get the efficiency of the car in km/kWh.
 
     Args:
-        num_laps (int): _description_
-        energy_joules (float): _description_
-        track_len_km (float): _description_
-    """
-    # convert joules to kWh
-    energy_kwh = energy_joules / 3_600_000
-    
-    # compute efficiency (km per kWh)
-    efficiency = (num_laps * track_len_km) / energy_kwh
-    
-    print(f"Efficiency: {efficiency:.2f} km/kWh")
+        distance_km (float): Total distance covered in kilometers.
+        energy_joules (float): Total energy consumed in joules.
 
-def get_power(data: pd.DataFrame):
+    Returns:
+        float: Efficiency in km/kWh.
+    """
+    energy_kwh = energy_joules / 3_600_000
+    if energy_kwh == 0:
+        raise ValueError("Energy must be greater than 0 to calculate efficiency")
+
+    efficiency = distance_km / energy_kwh
+    print(f"Efficiency: {efficiency:.2f} km/kWh")
+    return efficiency
+
+def get_power(data: pd.DataFrame) -> None:
     """Returns power used in a run
 
     Args:
@@ -25,15 +28,30 @@ def get_power(data: pd.DataFrame):
     """
     data['Power'] = (data['Current'] / 1e3) * (data['Voltage']/1e3)
 
-def get_total_energy(data: pd.DataFrame):
-    """Prints total energy used by the car
-
-    Args:
-        data (pd.DataFrame): dataframe holding the track csv results
-    """
+def get_total_energy(data: pd.DataFrame) -> float:
     if 'Power' not in data.columns:
         get_power(data=data)
     
     energy_joules = np.trapezoid(data['Power'], x=data['Tick'] / 1e3)
-    energy_kWh = energy_joules / 3600000  # Convert from J to kWh
+    energy_kWh = energy_joules / 3600000
+    
     print(f"\nTotal energy consumed: {energy_joules} J or {energy_kWh} kWh")
+    return energy_joules
+
+def get_distance_from_speed(data: pd.DataFrame) -> pd.DataFrame:
+    """Calculate cumulative distance from speed and tick data in kilometers."""
+    if "Tick" not in data.columns or "Speed" not in data.columns:
+        raise ValueError("Data must contain Tick and Speed columns")
+
+    result = data.copy()
+    time_s = (result["Tick"] - result["Tick"].iloc[0]) / 1000.0
+    speed_mps = (result["Speed"] * 0.001) / 3.6
+
+    dt = time_s.diff().fillna(0)
+    avg_speed_mps = (speed_mps + speed_mps.shift(1)).fillna(0) / 2
+
+    # avg_speed_mps * dt gives meters, so divide by 1000 to store kilometers.
+    result["Distance_km"] = (avg_speed_mps * dt).cumsum() / 1000
+
+    return result
+

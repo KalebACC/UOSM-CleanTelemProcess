@@ -16,12 +16,25 @@ def speed_to_mps(csv_speed):
     """Convert raw CSV speed to m/s."""
     return speed_to_kph(csv_speed) / 3.6
 
+
+def calculate_distance_km(data: pd.DataFrame) -> pd.Series:
+    """Calculate cumulative distance in kilometers from telemetry speed and time."""
+    time_s = (data["Tick"] - data["Tick"].iloc[0]) / 1000.0
+    speed_mps = speed_to_mps(data["Speed"])
+
+    dt = time_s.diff().fillna(0)
+    avg_speed_mps = (speed_mps + speed_mps.shift(1)).fillna(0) / 2
+    return (avg_speed_mps * dt).cumsum() / 1000
+
 class DataPlotter:
     """Read telemetry CSV data and render plots, with optional smoothing, speed conversion, and time filtering."""
+
+    #TODO TRUNCATE THE DF TO WHEN THE RUN OFFICIALY STARTS
 
     def __init__(self, file_path: str) -> None:
         self.file_path: str = file_path
         self.data: pd.DataFrame | None = None
+        self.load_data()
 
     def load_data(self, convert_speed: bool = True) -> None:
         """Load CSV, prepare TimePlot in minutes, and optionally convert speed."""
@@ -40,6 +53,8 @@ class DataPlotter:
         if convert_speed:
             self.data["Speed_kph"] = self.data["Speed"].apply(speed_to_kph)
             self.data["Speed_mps"] = self.data["Speed"].apply(speed_to_mps)
+
+        self.data["Distance_km"] = calculate_distance_km(self.data)
 
     def plot_single(self, column: str, smooth_window: int = 0, start_time: float | None = None, end_time: float | None = None,speed_unit: str = "kph") -> None:
         """Plot a single column with optional smoothing, minute range filter, and speed unit conversion."""
@@ -65,6 +80,14 @@ class DataPlotter:
         x = df["TimePlot"]
         y = df[column]
 
+        ylabel_map = {
+            "Speed": "Speed",
+            "Speed_kph": "Speed (kph)",
+            "Speed_mps": "Speed (m/s)",
+            "Distance_km": "Distance (km)",
+        }
+        ylabel = ylabel_map.get(column, column)
+
         plt.figure(figsize=(10, 5))
         plt.plot(x, y, label="Raw", alpha=0.7)
         if smooth_window > 1:
@@ -72,8 +95,8 @@ class DataPlotter:
             plt.plot(x, y_smooth, label=f"Smoothed ({smooth_window})", linewidth=2)
 
         plt.xlabel("Time (min)")
-        plt.ylabel(column)
-        plt.title(f"{column} vs Time")
+        plt.ylabel(ylabel)
+        plt.title(f"{ylabel} vs Time")
         plt.legend()
         plt.grid(True)
         plt.show()
@@ -84,6 +107,7 @@ class DataPlotter:
             raise ValueError("Load data first")
         self.plot_single("Throttle",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Speed",smooth_window,start_time,end_time,speed_unit)
+        self.plot_single("Distance_km",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Current",smooth_window,start_time,end_time,speed_unit)
         self.plot_single("Voltage",smooth_window,start_time,end_time,speed_unit)
 
