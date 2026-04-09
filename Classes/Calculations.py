@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 def get_efficiency(num_laps: int, energy_joules: float, track_len_km:float) -> None:
     """gets the efficiency of the car in km/kWh
@@ -16,14 +17,19 @@ def get_efficiency(num_laps: int, energy_joules: float, track_len_km:float) -> N
     
     print(f"Efficiency: {efficiency:.2f} km/kWh")
 
-def get_power(data):
+def get_power(data: pd.DataFrame):
+    """Returns power used in a run
+
+    Args:
+        data (pd.DataFrame): dataframe holding the track csv results
+    """
     data['Power'] = (data['Current'] / 1e3) * (data['Voltage']/1e3)
 
-def get_total_energy(data):
+def get_total_energy(data: pd.DataFrame):
     """Prints total energy used by the car
 
     Args:
-        data (df): dataframe holding the track csv results
+        data (pd.DataFrame): dataframe holding the track csv results
     """
     if 'Power' not in data.columns:
         get_power(data=data)
