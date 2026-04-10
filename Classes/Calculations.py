@@ -20,23 +20,26 @@ def get_efficiency(distance_km: float, energy_joules: float) -> float:
     print(f"Efficiency: {efficiency:.2f} km/kWh")
     return efficiency
 
+
 def get_power(data: pd.DataFrame) -> None:
     """Returns power used in a run
 
     Args:
         data (pd.DataFrame): dataframe holding the track csv results
     """
-    data['Power'] = (data['Current'] / 1e3) * (data['Voltage']/1e3)
+    data['Power'] = (data['Current'] / 1e3) * (data['Voltage'] / 1e3)
+
 
 def get_total_energy(data: pd.DataFrame) -> float:
     if 'Power' not in data.columns:
         get_power(data=data)
-    
+
     energy_joules = np.trapezoid(data['Power'], x=data['Tick'] / 1e3)
     energy_kWh = energy_joules / 3600000
-    
+
     print(f"\nTotal energy consumed: {energy_joules} J or {energy_kWh} kWh")
     return energy_joules
+
 
 def get_distance_from_speed(data: pd.DataFrame) -> pd.DataFrame:
     """Calculate cumulative distance from speed and tick data in kilometers."""
@@ -54,4 +57,3 @@ def get_distance_from_speed(data: pd.DataFrame) -> pd.DataFrame:
     result["Distance_km"] = (avg_speed_mps * dt).cumsum() / 1000
 
     return result
-
