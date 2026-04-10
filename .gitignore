@@ -1,3 +1,21 @@
 Classes/.DS_Store
 Data/.DS_Store
 .DS_Store
+Thumbs.db
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE + notebook checkpoints
+.idea/
+.ipynb_checkpoints/
+
+# Generated merged telemetry output
+Data/d_87_88_merged.csv
